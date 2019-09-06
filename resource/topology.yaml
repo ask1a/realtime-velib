@@ -1,0 +1,133 @@
+# topology definition
+
+# name to be used when submitting. This is what shows up...
+# in the Storm UI/storm command-line tool as the topology name
+# when submitted to Storm
+name: "velos"
+
+components:
+  - id: "stringScheme"
+    className: "org.apache.storm.kafka.StringScheme"
+
+  - id: "stringMultiScheme"
+    className: "org.apache.storm.spout.SchemeAsMultiScheme"
+    constructorArgs:
+      - ref: "stringScheme"
+
+  - id: "zkHosts"
+    className: "org.apache.storm.kafka.ZkHosts"
+    constructorArgs:
+      - "localhost:2181"
+
+# Alternative kafka config
+#  - id: "kafkaConfig"
+#    className: "org.apache.storm.kafka.KafkaConfig"
+#    constructorArgs:
+#      # brokerHosts
+#      - ref: "zkHosts"
+#      # topic
+#      - "velib-stations"
+#      # clientId (optional)
+#      - "myKafkaClientId"
+
+  - id: "spoutConfig"
+    className: "org.apache.storm.kafka.SpoutConfig"
+    constructorArgs:
+#      - ref: "kafkaConfig"
+      # brokerHosts
+      - ref: "zkHosts"
+      # topic
+      - "velib-stations"
+      # zkRoot
+      - ""
+      # id
+      - "myid"
+    properties:
+      - name: "ignoreZkOffsets"
+        value: true
+      - name: "scheme"
+        ref: "stringMultiScheme"
+
+config:
+  topology.workers: 1
+
+# spout definitions
+spouts:
+  - id: "kafka-spout"
+    className: "org.apache.storm.kafka.KafkaSpout"
+    constructorArgs:
+      - ref: "spoutConfig"
+
+
+# Bolt definitions
+bolts:
+  - id: "StationParsing-bolt"
+    className: "org.apache.storm.flux.wrappers.bolts.FluxShellBolt"
+    constructorArgs:
+      # Command line
+      - ["python", "parsingbolt.py"]
+      # Output field(s)
+      - ["city","station_id","date","available_stands"]
+    parallelism: 1
+
+  - id: "CityStats-bolt"
+    className: "org.apache.storm.flux.wrappers.bolts.FluxShellBolt"
+    constructorArgs:
+      # Command line
+      - ["python", "citystatsbolt.py"]
+      # Output field(s)
+      - ["city","date","total_available_stands"]
+    parallelism: 1
+
+  - id: "SaveResults-bolt"
+    className: "org.apache.storm.flux.wrappers.bolts.FluxShellBolt"
+    constructorArgs:
+      # Command line
+      - ["python", "saveresults.py"]
+      # Output field(s)
+      - ["city","date","total_available_stands"]
+    parallelism: 1
+
+  # Logging
+  - id: "log"
+    className: "org.apache.storm.flux.wrappers.bolts.LogInfoBolt"
+    parallelism: 1
+
+# Stream definitions
+streams:
+  - name: "Spout -> Parser" # name isn't used (placeholder for logging, UI, etc.)
+    # The stream emitter
+    from: "kafka-spout"
+    # The stream consumer
+    to: "StationParsing-bolt"
+    # Grouping type
+    grouping:
+      type: SHUFFLE
+
+  - name: "Parser -> Stats"
+    from: "StationParsing-bolt"
+    to: "CityStats-bolt"
+    grouping:
+      type: FIELDS
+      # field(s) to group on
+      args: ["city"]
+
+  - name: "Stats -> Save"
+    from: "CityStats-bolt"
+    to: "SaveResults-bolt"
+    grouping:
+      type: FIELDS
+      # field(s) to group on
+      args: ["city"]
+
+#  - name: "Parser -> Log"
+#    from: "StationParsing-bolt"
+#    to: "log"
+#    grouping:
+#      type: SHUFFLE
+
+  - name: "Stats -> Log"
+    from: "CityStats-bolt"
+    to: "log"
+    grouping:
+      type: SHUFFLE
