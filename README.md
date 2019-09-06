@@ -18,3 +18,5 @@ Lancement de l'application:
  - Lancer le producer Kafka 'get-stations.py'
  - Packager l'application via la commande 'mvn package' à la racine du projet
  - Lancer le .jar obtenu --> storm jar target/velos-1.0-SNAPSHOT.jar org.apache.storm.flux.Flux -r resource/topology.yaml (ne pas oublier de rajouter le dossier bin de l'application storm dans le PATH en éditant .bashrc)
+
+Askia VANRYCKEGHEM, Axelle RABANY
